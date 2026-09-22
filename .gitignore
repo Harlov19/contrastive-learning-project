@@ -1,111 +1,118 @@
-# ==============================
+# ============================================
 
 # Python
 
-# ==============================
+# ============================================
 
 **pycache**/
 *.py[cod]
-*$py.class
+*.pyo
+*.pyd
 *.so
 
-# Virtual environment
+# Python virtual environments
 
 .venv/
 venv/
 env/
 ENV/
+.ENV/
 
-# ==============================
+# ============================================
 
-# Data
+# Datasets
 
-# ==============================
+# ============================================
 
-# Downloaded datasets
+# Ignore downloaded/generated dataset contents
 
-data/
+data/*
+!data/.gitkeep
 
-# ==============================
+# ============================================
 
-# Model checkpoints
+# Model Checkpoints
 
-# ==============================
+# ============================================
 
-checkpoints/
+# Ignore trained model files
+
+checkpoints/*
+!checkpoints/.gitkeep
+
 *.pt
 *.pth
 *.ckpt
+*.safetensors
 *.onnx
 
-# ==============================
+# ============================================
 
-# Experiment outputs
+# Experiment Outputs
 
-# ==============================
+# ============================================
 
-results/
-experiments/
+# Ignore generated experiment artifacts
 
-# ==============================
+experiments/*
+!experiments/.gitkeep
 
-# Jupyter
+# ============================================
 
-# ==============================
+# Results
+
+# ============================================
+
+# Ignore generated results
+
+results/*
+!results/.gitkeep
+
+# Common generated result files
+
+*.csv
+*.json
+*.npy
+*.npz
+
+# Keep manually tracked configuration files if needed
+
+!results/.gitkeep
+
+# ============================================
+
+# Jupyter Notebook
+
+# ============================================
 
 .ipynb_checkpoints/
 
-# ==============================
+# ============================================
 
-# Python tooling
+# Visualization / Generated Images
 
-# ==============================
+# ============================================
 
-.pytest_cache/
-.mypy_cache/
-.ruff_cache/
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.webp
+*.svg
 
-# ==============================
-
-# IDE / Editors
-
-# ==============================
-
-.vscode/
-.idea/
-
-# ==============================
-
-# OS files
-
-# ==============================
-
-.DS_Store
-Thumbs.db
-
-# ==============================
+# ============================================
 
 # Logs
 
-# ==============================
+# ============================================
 
 *.log
 
-# ==============================
+# ============================================
 
-# Environment / secrets
+# Temporary Files
 
-# ==============================
-
-.env
-.env.*
-!.env.example
-
-# ==============================
-
-# Temporary files
-
-# ==============================
+# ============================================
 
 *.tmp
 *.temp
@@ -114,3 +121,68 @@ Thumbs.db
 *~
 *.bak
 *.backup
+
+# ============================================
+
+# Environment Variables / Secrets
+
+# ============================================
+
+.env
+.env.*
+!.env.example
+
+# ============================================
+
+# IDE / Editor
+
+# ============================================
+
+.vscode/
+.idea/
+*.iml
+
+# ============================================
+
+# Operating System
+
+# ============================================
+
+.DS_Store
+.DS_Store?
+Thumbs.db
+desktop.ini
+
+# ============================================
+
+# Coverage / Testing
+
+# ============================================
+
+.coverage
+.coverage.*
+htmlcov/
+.pytest_cache/
+.mypy_cache/
+
+# ============================================
+
+# Python Packaging
+
+# ============================================
+
+*.egg
+*.egg-info/
+dist/
+build/
+pip-wheel-metadata/
+
+# ============================================
+
+# Local Experiment / Profiling Files
+
+# ============================================
+
+.prof
+*.prof
+*.pstats

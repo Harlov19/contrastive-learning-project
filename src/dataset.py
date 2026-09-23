@@ -27,16 +27,27 @@ class ContrastiveCIFAR10(Dataset):
 
     Each sample produces two independently augmented
     views of the same original image.
+
+    The augmentation strength can be selected as:
+        - weak
+        - strong
     """
 
-    def __init__(self, train=True):
+    def __init__(
+        self,
+        train=True,
+        augmentation_strength="strong"
+    ):
+
         self.dataset = datasets.CIFAR10(
             root=DATA_DIR,
             train=train,
             download=True
         )
 
-        self.transform = ContrastiveTransform()
+        self.transform = ContrastiveTransform(
+            strength=augmentation_strength
+        )
 
     def __len__(self):
         return len(self.dataset)
@@ -71,7 +82,10 @@ def get_datasets():
     return train_dataset, test_dataset
 
 
-def get_dataloaders(batch_size=128, num_workers=2):
+def get_dataloaders(
+    batch_size=128,
+    num_workers=2
+):
 
     train_dataset, test_dataset = get_datasets()
 
@@ -94,10 +108,14 @@ def get_dataloaders(batch_size=128, num_workers=2):
 
 def get_contrastive_dataloader(
     batch_size=128,
-    num_workers=2
+    num_workers=2,
+    augmentation_strength="strong"
 ):
 
-    dataset = ContrastiveCIFAR10(train=True)
+    dataset = ContrastiveCIFAR10(
+        train=True,
+        augmentation_strength=augmentation_strength
+    )
 
     loader = DataLoader(
         dataset,
@@ -112,9 +130,9 @@ def get_contrastive_dataloader(
 
 if __name__ == "__main__":
 
-    print("=" * 50)
+    print("=" * 60)
     print("CIFAR-10 DATASET")
-    print("=" * 50)
+    print("=" * 60)
 
     train_dataset, test_dataset = get_datasets()
 
@@ -136,27 +154,40 @@ if __name__ == "__main__":
     images, labels = next(iter(train_loader))
 
     print()
-    print("=" * 50)
+    print("=" * 60)
     print("FIRST STANDARD TRAINING BATCH")
-    print("=" * 50)
+    print("=" * 60)
 
     print(f"Batch image shape: {images.shape}")
     print(f"Batch label shape: {labels.shape}")
 
-    contrastive_loader = get_contrastive_dataloader(
-        batch_size=128,
-        num_workers=2
-    )
+    for strength in ["weak", "strong"]:
 
-    view_1, view_2, labels = next(iter(contrastive_loader))
+        contrastive_loader = get_contrastive_dataloader(
+            batch_size=128,
+            num_workers=2,
+            augmentation_strength=strength
+        )
+
+        view_1, view_2, labels = next(
+            iter(contrastive_loader)
+        )
+
+        print()
+        print("=" * 60)
+        print(
+            f"CONTRASTIVE BATCH "
+            f"({strength.upper()} AUGMENTATION)"
+        )
+        print("=" * 60)
+
+        print(f"View 1 shape:      {view_1.shape}")
+        print(f"View 2 shape:      {view_2.shape}")
+        print(f"Labels shape:      {labels.shape}")
+        print(f"View 1 dtype:      {view_1.dtype}")
+        print(f"View 2 dtype:      {view_2.dtype}")
 
     print()
-    print("=" * 50)
-    print("FIRST CONTRASTIVE BATCH")
-    print("=" * 50)
-
-    print(f"View 1 shape:      {view_1.shape}")
-    print(f"View 2 shape:      {view_2.shape}")
-    print(f"Labels shape:      {labels.shape}")
-    print(f"View 1 dtype:      {view_1.dtype}")
-    print(f"View 2 dtype:      {view_2.dtype}")
+    print("=" * 60)
+    print("DATASET TEST COMPLETE")
+    print("=" * 60)

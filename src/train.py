@@ -1,8 +1,8 @@
 import os
 import json
 import random
-import numpy as np
 
+import numpy as np
 import torch
 import torch.optim as optim
 
@@ -31,6 +31,9 @@ REPRESENTATION_DIM = 128
 PROJECTION_HIDDEN_DIM = 128
 PROJECTION_DIM = 64
 
+AUGMENTATION_STRENGTH = "strong"
+USE_PROJECTION = True
+
 CHECKPOINT_DIR = "./checkpoints"
 RESULTS_DIR = "./results"
 
@@ -54,11 +57,12 @@ HISTORY_PATH = os.path.join(
 # Reproducibility
 # ============================================================
 
-def set_seed(seed=42):
-
+def set_seed(seed=SEED):
+    """
+    Set random seeds for reproducible experiments.
+    """
     random.seed(seed)
     np.random.seed(seed)
-
     torch.manual_seed(seed)
 
     if torch.cuda.is_available():
@@ -70,17 +74,16 @@ def set_seed(seed=42):
 # ============================================================
 
 def get_device():
-
+    """
+    Select GPU if available, otherwise CPU.
+    """
     if torch.cuda.is_available():
-
         device = torch.device("cuda")
-
-        print(f"Using GPU: {torch.cuda.get_device_name(0)}")
-
+        print(
+            f"Using GPU: {torch.cuda.get_device_name(0)}"
+        )
     else:
-
         device = torch.device("cpu")
-
         print("CUDA not available. Using CPU.")
 
     return device
@@ -95,24 +98,32 @@ def save_checkpoint(
     optimizer,
     epoch,
     loss,
-    path
+    path,
+    config=None
 ):
+    """
+    Save model, optimizer, training state, and configuration.
+    """
 
-    checkpoint = {
-        "epoch": epoch,
-        "model_state_dict": model.state_dict(),
-        "optimizer_state_dict": optimizer.state_dict(),
-        "loss": loss,
-
-        "config": {
+    if config is None:
+        config = {
             "batch_size": BATCH_SIZE,
             "learning_rate": LEARNING_RATE,
             "weight_decay": WEIGHT_DECAY,
             "temperature": TEMPERATURE,
             "representation_dim": REPRESENTATION_DIM,
             "projection_hidden_dim": PROJECTION_HIDDEN_DIM,
-            "projection_dim": PROJECTION_DIM
+            "projection_dim": PROJECTION_DIM,
+            "augmentation_strength": AUGMENTATION_STRENGTH,
+            "use_projection": USE_PROJECTION
         }
+
+    checkpoint = {
+        "epoch": epoch,
+        "model_state_dict": model.state_dict(),
+        "optimizer_state_dict": optimizer.state_dict(),
+        "loss": loss,
+        "config": config
     }
 
     torch.save(
@@ -122,7 +133,7 @@ def save_checkpoint(
 
 
 # ============================================================
-# Training
+# Training: One Epoch
 # ============================================================
 
 def train_one_epoch(
@@ -131,13 +142,26 @@ def train_one_epoch(
     optimizer,
     criterion,
     device,
-    epoch
+    epoch,
+    verbose=True
 ):
+    """
+    Train the model for one epoch.
+
+    Each batch contains two augmented views of the
+    same images.
+
+    The model produces:
+
+        h = encoder representation
+        z = projection representation
+
+    The contrastive loss is computed using z.
+    """
 
     model.train()
 
     total_loss = 0.0
-
     num_batches = len(loader)
 
     for batch_idx, (view_1, view_2, _) in enumerate(loader):
@@ -174,8 +198,7 @@ def train_one_epoch(
         # Progress
         # ----------------------------------------------------
 
-        if (batch_idx + 1) % 50 == 0:
-
+        if verbose and (batch_idx + 1) % 50 == 0:
             print(
                 f"Epoch [{epoch}] "
                 f"Batch [{batch_idx + 1}/{num_batches}] "
@@ -188,34 +211,83 @@ def train_one_epoch(
 
 
 # ============================================================
-# Main
+# Reusable Training Function
 # ============================================================
 
-def main():
+def train_model(
+    temperature=TEMPERATURE,
+    augmentation_strength=AUGMENTATION_STRENGTH,
+    use_projection=USE_PROJECTION,
+    epochs=EPOCHS,
+    batch_size=BATCH_SIZE,
+    num_workers=NUM_WORKERS,
+    learning_rate=LEARNING_RATE,
+    weight_decay=WEIGHT_DECAY,
+    representation_dim=REPRESENTATION_DIM,
+    projection_hidden_dim=PROJECTION_HIDDEN_DIM,
+    projection_dim=PROJECTION_DIM,
+    seed=SEED,
+    save_checkpoints=False,
+    best_model_path=None,
+    last_model_path=None,
+    history_path=None,
+    verbose=True
+):
+    """
+    Reusable contrastive-learning training function.
 
-    print("=" * 60)
-    print("CONTRASTIVE LEARNING TRAINING")
-    print("=" * 60)
+    Parameters
+    ----------
+    temperature : float
+        Temperature used by InfoNCE / NT-Xent.
+
+    augmentation_strength : str
+        "weak" or "strong".
+
+    use_projection : bool
+        Whether the projection head is used.
+
+    epochs : int
+        Number of training epochs.
+
+    batch_size : int
+        Training batch size.
+
+    save_checkpoints : bool
+        Whether checkpoints should be saved.
+
+    Returns
+    -------
+    model : ContrastiveModel
+        Trained model.
+
+    history : list
+        Training loss history.
+
+    device : torch.device
+        Device used for training.
+    """
 
     # --------------------------------------------------------
     # Reproducibility
     # --------------------------------------------------------
 
-    set_seed(SEED)
+    set_seed(seed)
 
     # --------------------------------------------------------
     # Directories
     # --------------------------------------------------------
 
-    os.makedirs(
-        CHECKPOINT_DIR,
-        exist_ok=True
-    )
+    if save_checkpoints:
+        os.makedirs(
+            CHECKPOINT_DIR,
+            exist_ok=True
+        )
 
-    os.makedirs(
-        RESULTS_DIR,
-        exist_ok=True
-    )
+        os.makedirs(
+            RESULTS_DIR,
+            exist_ok=True
+        )
 
     # --------------------------------------------------------
     # Device
@@ -223,41 +295,57 @@ def main():
 
     device = get_device()
 
-    print(f"Device: {device}")
+    if verbose:
+        print(f"Device: {device}")
 
     # --------------------------------------------------------
     # Data
     # --------------------------------------------------------
 
-    print()
-    print("Loading CIFAR-10...")
+    if verbose:
+        print()
+        print("Loading CIFAR-10...")
 
     train_loader = get_contrastive_dataloader(
-        batch_size=BATCH_SIZE,
-        num_workers=NUM_WORKERS
+        batch_size=batch_size,
+        num_workers=num_workers,
+        augmentation_strength=augmentation_strength
     )
 
-    print(
-        f"Training samples: "
-        f"{len(train_loader.dataset)}"
-    )
+    if verbose:
+        print(
+            f"Training samples: "
+            f"{len(train_loader.dataset)}"
+        )
 
-    print(
-        f"Batches per epoch: "
-        f"{len(train_loader)}"
-    )
+        print(
+            f"Batches per epoch: "
+            f"{len(train_loader)}"
+        )
+
+        print(
+            f"Augmentation: "
+            f"{augmentation_strength}"
+        )
 
     # --------------------------------------------------------
     # Model
     # --------------------------------------------------------
 
-    print()
-    print("Creating model...")
+    if verbose:
+        print()
+        print("Creating model...")
+
+        print(
+            f"Projection head: "
+            f"{'enabled' if use_projection else 'disabled'}"
+        )
 
     model = ContrastiveModel(
-        representation_dim=REPRESENTATION_DIM,
-        projection_hidden_dim=PROJECTION_HIDDEN_DIM,
-        projection_dim=PROJECTION_DIM
+        representation_dim=representation_dim,
+        projection_hidden_dim=projection_hidden_dim,
+        projection_dim=projection_dim,
+        use_projection=use_projection
     )
 
     model = model.to(device)
@@ -267,7 +355,7 @@ def main():
     # --------------------------------------------------------
 
     criterion = NTXentLoss(
-        temperature=TEMPERATURE
+        temperature=temperature
     )
 
     # --------------------------------------------------------
@@ -276,9 +364,28 @@ def main():
 
     optimizer = optim.Adam(
         model.parameters(),
-        lr=LEARNING_RATE,
-        weight_decay=WEIGHT_DECAY
+        lr=learning_rate,
+        weight_decay=weight_decay
     )
+
+    # --------------------------------------------------------
+    # Experiment configuration
+    # --------------------------------------------------------
+
+    config = {
+        "seed": seed,
+        "batch_size": batch_size,
+        "num_workers": num_workers,
+        "epochs": epochs,
+        "learning_rate": learning_rate,
+        "weight_decay": weight_decay,
+        "temperature": temperature,
+        "representation_dim": representation_dim,
+        "projection_hidden_dim": projection_hidden_dim,
+        "projection_dim": projection_dim,
+        "augmentation_strength": augmentation_strength,
+        "use_projection": use_projection
+    }
 
     # --------------------------------------------------------
     # Training
@@ -288,15 +395,19 @@ def main():
 
     best_loss = float("inf")
 
-    print()
-    print("=" * 60)
-    print("TRAINING")
-    print("=" * 60)
-
-    for epoch in range(1, EPOCHS + 1):
-
+    if verbose:
         print()
-        print(f"Epoch {epoch}/{EPOCHS}")
+        print("=" * 60)
+        print("TRAINING")
+        print("=" * 60)
+
+    for epoch in range(1, epochs + 1):
+
+        if verbose:
+            print()
+            print(
+                f"Epoch {epoch}/{epochs}"
+            )
 
         average_loss = train_one_epoch(
             model=model,
@@ -304,13 +415,15 @@ def main():
             optimizer=optimizer,
             criterion=criterion,
             device=device,
-            epoch=epoch
+            epoch=epoch,
+            verbose=verbose
         )
 
-        print(
-            f"Epoch {epoch} average loss: "
-            f"{average_loss:.4f}"
-        )
+        if verbose:
+            print(
+                f"Epoch {epoch} average loss: "
+                f"{average_loss:.4f}"
+            )
 
         history.append({
             "epoch": epoch,
@@ -321,13 +434,22 @@ def main():
         # Save last checkpoint
         # ----------------------------------------------------
 
-        save_checkpoint(
-            model=model,
-            optimizer=optimizer,
-            epoch=epoch,
-            loss=average_loss,
-            path=LAST_MODEL_PATH
-        )
+        if save_checkpoints:
+
+            current_last_path = (
+                last_model_path
+                if last_model_path is not None
+                else LAST_MODEL_PATH
+            )
+
+            save_checkpoint(
+                model=model,
+                optimizer=optimizer,
+                epoch=epoch,
+                loss=average_loss,
+                path=current_last_path,
+                config=config
+            )
 
         # ----------------------------------------------------
         # Save best checkpoint
@@ -337,37 +459,93 @@ def main():
 
             best_loss = average_loss
 
-            save_checkpoint(
-                model=model,
-                optimizer=optimizer,
-                epoch=epoch,
-                loss=average_loss,
-                path=BEST_MODEL_PATH
-            )
+            if save_checkpoints:
 
-            print(
-                f"New best model saved "
-                f"(loss={best_loss:.4f})"
-            )
+                current_best_path = (
+                    best_model_path
+                    if best_model_path is not None
+                    else BEST_MODEL_PATH
+                )
+
+                save_checkpoint(
+                    model=model,
+                    optimizer=optimizer,
+                    epoch=epoch,
+                    loss=average_loss,
+                    path=current_best_path,
+                    config=config
+                )
+
+                if verbose:
+                    print(
+                        f"New best model saved "
+                        f"(loss={best_loss:.4f})"
+                    )
 
     # --------------------------------------------------------
-    # Save training history
+    # Save history
     # --------------------------------------------------------
 
-    with open(
-        HISTORY_PATH,
-        "w"
-    ) as f:
+    if save_checkpoints:
 
-        json.dump(
-            history,
-            f,
-            indent=4
+        current_history_path = (
+            history_path
+            if history_path is not None
+            else HISTORY_PATH
         )
 
+        with open(
+            current_history_path,
+            "w"
+        ) as f:
+
+            json.dump(
+                history,
+                f,
+                indent=4
+            )
+
     # --------------------------------------------------------
-    # Summary
+    # Return
     # --------------------------------------------------------
+
+    return model, history, device
+
+
+# ============================================================
+# Main Training Run
+# ============================================================
+
+def main():
+
+    print("=" * 60)
+    print("CONTRASTIVE LEARNING TRAINING")
+    print("=" * 60)
+
+    model, history, device = train_model(
+        temperature=TEMPERATURE,
+        augmentation_strength=AUGMENTATION_STRENGTH,
+        use_projection=USE_PROJECTION,
+        epochs=EPOCHS,
+        batch_size=BATCH_SIZE,
+        num_workers=NUM_WORKERS,
+        learning_rate=LEARNING_RATE,
+        weight_decay=WEIGHT_DECAY,
+        representation_dim=REPRESENTATION_DIM,
+        projection_hidden_dim=PROJECTION_HIDDEN_DIM,
+        projection_dim=PROJECTION_DIM,
+        seed=SEED,
+        save_checkpoints=True,
+        best_model_path=BEST_MODEL_PATH,
+        last_model_path=LAST_MODEL_PATH,
+        history_path=HISTORY_PATH,
+        verbose=True
+    )
+
+    best_loss = min(
+        item["loss"]
+        for item in history
+    )
 
     print()
     print("=" * 60)
@@ -386,6 +564,10 @@ def main():
         f"Training history: {HISTORY_PATH}"
     )
 
+
+# ============================================================
+# Entry Point
+# ============================================================
 
 if __name__ == "__main__":
     main()

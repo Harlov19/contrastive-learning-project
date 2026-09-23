@@ -1,5 +1,7 @@
 import os
+import random
 
+import numpy as np
 import torch
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
@@ -17,6 +19,9 @@ CHECKPOINT_PATH = "./checkpoints/best_model.pt"
 
 BATCH_SIZE = 256
 NUM_WORKERS = 2
+
+# Reproducibility
+SEED = 42
 
 # k-NN evaluation
 K = 5
@@ -47,19 +52,44 @@ CIFAR10_CLASSES = [
 
 
 # ============================================================
+# REPRODUCIBILITY
+# ============================================================
+
+def set_seed(seed=SEED):
+    """
+    Set random seeds for reproducible evaluation.
+    """
+
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+
+
+# ============================================================
 # DEVICE
 # ============================================================
 
 def get_device():
+
     if torch.cuda.is_available():
+
         device = torch.device("cuda")
+
         print(
             f"Using GPU: "
             f"{torch.cuda.get_device_name(0)}"
         )
+
     else:
+
         device = torch.device("cpu")
-        print("CUDA not available. Using CPU.")
+
+        print(
+            "CUDA not available. Using CPU."
+        )
 
     return device
 
@@ -125,6 +155,7 @@ def get_dataloaders():
 def load_model(device):
 
     if not os.path.exists(CHECKPOINT_PATH):
+
         raise FileNotFoundError(
             f"Checkpoint not found: "
             f"{CHECKPOINT_PATH}"
@@ -135,7 +166,10 @@ def load_model(device):
         map_location=device
     )
 
-    config = checkpoint.get("config", {})
+    config = checkpoint.get(
+        "config",
+        {}
+    )
 
     model = ContrastiveModel(
         representation_dim=config.get(
@@ -393,9 +427,11 @@ def select_geometry_samples(
 ):
 
     if num_samples > embeddings.size(0):
+
         num_samples = embeddings.size(0)
 
     generator = torch.Generator()
+
     generator.manual_seed(seed)
 
     indices = torch.randperm(
@@ -537,8 +573,10 @@ def calculate_representation_geometry(
     return {
         "same_class_mean": same_class_mean,
         "same_class_std": same_class_std,
-        "different_class_mean": different_class_mean,
-        "different_class_std": different_class_std,
+        "different_class_mean":
+            different_class_mean,
+        "different_class_std":
+            different_class_std,
         "similarity_gap": similarity_gap,
         "average_pairwise_similarity":
             average_pairwise_similarity,
@@ -546,9 +584,13 @@ def calculate_representation_geometry(
             average_embedding_variance,
         "num_samples": n,
         "num_same_class_pairs":
-            int(same_class_mask.sum().item()),
+            int(
+                same_class_mask.sum().item()
+            ),
         "num_different_class_pairs":
-            int(different_class_mask.sum().item())
+            int(
+                different_class_mask.sum().item()
+            )
     }
 
 
@@ -662,6 +704,10 @@ def save_results(
         f.write(
             f"Checkpoint: "
             f"{CHECKPOINT_PATH}\n"
+        )
+
+        f.write(
+            f"Seed: {SEED}\n"
         )
 
         f.write(
@@ -823,10 +869,20 @@ def save_results(
 def main():
 
     print("=" * 70)
+
     print(
         "CONTRASTIVE REPRESENTATION EVALUATION"
     )
+
     print("=" * 70)
+
+    # Set the seed before model construction.
+    # This makes the random baseline deterministic.
+    set_seed(SEED)
+
+    print(
+        f"Random seed: {SEED}"
+    )
 
     device = get_device()
 
@@ -969,8 +1025,13 @@ def main():
     print("=" * 70)
 
     print()
-    print("Creating untrained model...")
+    print(
+        "Creating untrained model..."
+    )
 
+    # Because set_seed(SEED) was called before this
+    # model was constructed, its initialization is
+    # reproducible.
     random_model = create_random_model(
         device
     )
@@ -1101,10 +1162,6 @@ def main():
         seed=GEOMETRY_SEED
     )
 
-    # --------------------------------------------------------
-    # Trained geometry
-    # --------------------------------------------------------
-
     print()
     print(
         "Calculating trained representation geometry..."
@@ -1118,13 +1175,9 @@ def main():
     )
 
     print_geometry_results(
-        "Trained",
+        "trained",
         trained_geometry
     )
-
-    # --------------------------------------------------------
-    # Random geometry
-    # --------------------------------------------------------
 
     print()
     print(
@@ -1139,19 +1192,13 @@ def main():
     )
 
     print_geometry_results(
-        "Random",
+        "random",
         random_geometry
     )
 
     # --------------------------------------------------------
     # Geometry comparison
     # --------------------------------------------------------
-
-    geometry_gap_improvement = (
-        trained_geometry["similarity_gap"]
-        -
-        random_geometry["similarity_gap"]
-    )
 
     print()
     print("=" * 70)
@@ -1163,7 +1210,7 @@ def main():
     print()
 
     print(
-        f"{'Metric':35s}"
+        f"{'Metric':40s}"
         f"{'Random':>15s}"
         f"{'Trained':>15s}"
     )
@@ -1171,43 +1218,49 @@ def main():
     print("-" * 70)
 
     print(
-        f"{'Same-class cosine similarity':35s}"
+        f"{'Same-class cosine similarity':40s}"
         f"{random_geometry['same_class_mean']:>15.4f}"
         f"{trained_geometry['same_class_mean']:>15.4f}"
     )
 
     print(
-        f"{'Different-class cosine similarity':35s}"
+        f"{'Different-class cosine similarity':40s}"
         f"{random_geometry['different_class_mean']:>15.4f}"
         f"{trained_geometry['different_class_mean']:>15.4f}"
     )
 
     print(
-        f"{'Similarity gap':35s}"
+        f"{'Similarity gap':40s}"
         f"{random_geometry['similarity_gap']:>15.4f}"
         f"{trained_geometry['similarity_gap']:>15.4f}"
     )
 
     print(
-        f"{'Average pairwise similarity':35s}"
+        f"{'Average pairwise similarity':40s}"
         f"{random_geometry['average_pairwise_similarity']:>15.4f}"
         f"{trained_geometry['average_pairwise_similarity']:>15.4f}"
     )
 
     print(
-        f"{'Average embedding variance':35s}"
+        f"{'Average embedding variance':40s}"
         f"{random_geometry['average_embedding_variance']:>15.6f}"
         f"{trained_geometry['average_embedding_variance']:>15.6f}"
     )
 
+    geometry_gap_improvement = (
+        trained_geometry["similarity_gap"]
+        - random_geometry["similarity_gap"]
+    )
+
     print()
+
     print(
         f"Similarity-gap improvement: "
         f"{geometry_gap_improvement:.4f}"
     )
 
     # --------------------------------------------------------
-    # Save
+    # Save results
     # --------------------------------------------------------
 
     results_path = save_results(
@@ -1227,7 +1280,9 @@ def main():
 
     print()
     print("=" * 70)
-    print("EVALUATION COMPLETE")
+    print(
+        "EVALUATION COMPLETE"
+    )
     print("=" * 70)
 
 
